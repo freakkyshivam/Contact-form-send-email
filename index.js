@@ -1,9 +1,8 @@
- 
 import express from 'express';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import 'dotenv/config';
-
+import axios from "axios";
 const app = express();
 
  
@@ -42,17 +41,19 @@ app.get("/", (req, res) => {
 });
 
  
+
+
 app.post('/api/contact', async (req, res) => {
   try {
     const { name, email, subject, message } = req.body;
- 
+
     if (!name || !email || !subject || !message) {
       return res.status(400).json({
         success: false,
         error: "All fields are required"
       });
     }
- 
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -60,56 +61,52 @@ app.post('/api/contact', async (req, res) => {
         error: "Invalid email format"
       });
     }
- 
-    if (!process.env.SENDER_EMAIL || !process.env.SMTP_PASS || !process.env.SMTP_USER) {
-      console.error("❌ Missing environment variables");
+
+    if (!process.env.SENDER_EMAIL || !process.env.SMTP_API_KEY) {
+      console.error("❌ Missing BREVO_API_KEY or SENDER_EMAIL");
       return res.status(500).json({
         success: false,
         error: "Server configuration error"
       });
     }
 
-   
-    const mailOptions = {
-      from: process.env.SENDER_EMAIL,
-      to: process.env.SENDER_EMAIL,  
-      replyTo: email, 
-      subject: `Portfolio Contact: ${subject}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-          <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <h2 style="color: #a855f7; border-bottom: 2px solid #a855f7; padding-bottom: 10px; margin-bottom: 20px;">
-              New Contact Form Submission
-            </h2>
-            
-            <div style="margin: 20px 0;">
-              <p style="margin: 10px 0;">
-                <strong style="color: #555;">Name:</strong> 
-                <span style="color: #333;">${name}</span>
-              </p>
-              <p style="margin: 10px 0;">
-                <strong style="color: #555;">Email:</strong> 
-                <span style="color: #333;">${email}</span>
-              </p>
-              <p style="margin: 10px 0;">
-                <strong style="color: #555;">Subject:</strong> 
-                <span style="color: #333;">${subject}</span>
-              </p>
-            </div>
-            
-            <div style="margin-top: 20px; padding: 20px; background-color: #f9f9f9; border-left: 4px solid #a855f7; border-radius: 5px;">
-              <h3 style="color: #333; margin-top: 0;">Message:</h3>
-              <p style="color: #666; line-height: 1.6; white-space: pre-wrap;">${message}</p>
-            </div>
-            
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #999; font-size: 12px;">
-              <p>This email was sent from your portfolio contact form.</p>
-              <p>Reply directly to this email to respond to ${email}</p>
-            </div>
+    
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <h2 style="color: #a855f7; border-bottom: 2px solid #a855f7; padding-bottom: 10px; margin-bottom: 20px;">
+            New Contact Form Submission
+          </h2>
+          
+          <div style="margin: 20px 0;">
+            <p style="margin: 10px 0;">
+              <strong style="color: #555;">Name:</strong> 
+              <span style="color: #333;">${name}</span>
+            </p>
+            <p style="margin: 10px 0;">
+              <strong style="color: #555;">Email:</strong> 
+              <span style="color: #333;">${email}</span>
+            </p>
+            <p style="margin: 10px 0;">
+              <strong style="color: #555;">Subject:</strong> 
+              <span style="color: #333;">${subject}</span>
+            </p>
+          </div>
+          
+          <div style="margin-top: 20px; padding: 20px; background-color: #f9f9f9; border-left: 4px solid #a855f7; border-radius: 5px;">
+            <h3 style="color: #333; margin-top: 0;">Message:</h3>
+            <p style="color: #666; line-height: 1.6; white-space: pre-wrap;">${message}</p>
+          </div>
+          
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #999; font-size: 12px;">
+            <p>This email was sent from your portfolio contact form.</p>
+            <p>Reply directly to this email to respond to ${email}</p>
           </div>
         </div>
-      `,
-      text: `
+      </div>
+    `;
+
+    const textContent = `
 New Contact Form Submission
 
 Name: ${name}
@@ -122,30 +119,42 @@ ${message}
 ---
 This email was sent from your portfolio contact form.
 Reply to: ${email}
-      `
-    };
- 
-    const info = await transporter.sendMail(mailOptions);
+    `;
 
-    console.log("✅ Email sent successfully");
-    console.log("   From:", name, `(${email})`);
-    console.log("   Subject:", subject);
-    console.log("   Message ID:", info.messageId);
- 
-    res.status(200).json({
-      success: true,
-      message: "Email sent successfully!"
-    });
+    
+    const payload = {
+      sender: { name: "My Portfolio", email: process.env.SENDER_EMAIL },
+      to: [{ email: process.env.SENDER_EMAIL }],
+      replyTo: { email },
+      subject: `Portfolio Contact: ${subject}`,
+      htmlContent,
+      textContent
+    };
+
+    const response = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      payload,
+      {
+        headers: {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "api-key": process.env.SMTP_API_KEY
+        },
+        timeout: 15000  
+      }
+    );
+
+    console.log("✅ Email sent via Brevo API:", response.data);
+    res.status(200).json({ success: true, message: "Email sent successfully!" });
 
   } catch (error) {
-    console.error("❌ Error sending email:", error.message);
-  
-    res.status(500).json({
-      success: false,
-      error: "Failed to send email. Please try again later."
-    });
+     
+    console.error("❌ Error sending via Brevo API:", error.response?.data || error.message || error);
+    const errMsg = error.response?.data?.message || error.message || "Failed to send email";
+    res.status(500).json({ success: false, error: errMsg });
   }
 });
+
  
 app.use((req, res) => {
   res.status(404).json({
