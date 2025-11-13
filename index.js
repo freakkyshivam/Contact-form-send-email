@@ -1,76 +1,37 @@
 import express from 'express';
-import nodemailer from 'nodemailer';
 import cors from 'cors';
 import 'dotenv/config';
 import axios from "axios";
+
 const app = express();
 
- 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174','https://my-portfolio-beige-three-27.vercel.app'], 
+  origin: [
+   'http://localhost:5173', 
+   'http://localhost:3000', 
+   'http://localhost:5000', 
+   'http://localhost:5174',
+   'https://my-portfolio-beige-three-27.vercel.app',
+  'https://freakkyshivam.netlify.app'
+  ], 
   credentials: true
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
- 
-const transporter = nodemailer.createTransport({
-  host: 'smtp-relay.brevo.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
- 
-transporter.verify((err, success) => {
-  if (err) {
-    console.error("❌ SMTP verification failed:", err.message);
-  } else {
-    console.log("✅ SMTP server is ready to send emails");
-  }
-});
- 
-app.get("/", (req, res) => {
-  res.json({ 
-    status: 'Server is running',
-    timestamp: new Date().toISOString()
-  });
-});
-
- 
-
 
 app.post('/api/contact', async (req, res) => {
   try {
     const { name, email, subject, message } = req.body;
 
     if (!name || !email || !subject || !message) {
-      return res.status(400).json({
-        success: false,
-        error: "All fields are required"
-      });
+      return res.status(400).json({ success: false, error: "All fields are required" });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        error: "Invalid email format"
-      });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: "Invalid email" });
     }
 
-    if (!process.env.SENDER_EMAIL || !process.env.SMTP_API_KEY) {
-      console.error("❌ Missing BREVO_API_KEY or SENDER_EMAIL");
-      return res.status(500).json({
-        success: false,
-        error: "Server configuration error"
-      });
-    }
-
-    
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
@@ -131,51 +92,28 @@ Reply to: ${email}
       textContent
     };
 
-    const response = await axios.post(
+    const response =  axios.post(
       "https://api.brevo.com/v3/smtp/email",
       payload,
       {
         headers: {
-          "accept": "application/json",
           "content-type": "application/json",
           "api-key": process.env.SMTP_API_KEY
         },
-        timeout: 15000  
+        timeout: 5000
       }
     );
 
-    console.log("✅ Email sent via Brevo API:", response.data);
-    res.status(200).json({ success: true, message: "Email sent successfully!" });
+    res.json({ success: true, message: "Email sent successfully!" });
 
   } catch (error) {
-     
-    console.error("❌ Error sending via Brevo API:", error.response?.data || error.message || error);
-    const errMsg = error.response?.data?.message || error.message || "Failed to send email";
-    res.status(500).json({ success: false, error: errMsg });
+    res.status(500).json({ 
+      success: false, 
+      error: "Email sending failed. Try again later." 
+    });
   }
 });
 
- 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: "Endpoint not found"
-  });
-});
-
- 
-app.use((err, req, res, next) => {
-  console.error("Server error:", err);
-  res.status(500).json({
-    success: false,
-    error: "Internal server error"
-  });
-});
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📧 Email service configured with Brevo SMTP`);
-  console.log(`✅ Ready to receive contact form submissions`);
-});
+app.listen(process.env.PORT || 5000, () =>
+  console.log("Server running")
+);
