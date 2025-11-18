@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import axios from "axios";
-
+import { rateLimit } from 'express-rate-limit'
 const app = express();
 
 app.use(cors({
@@ -17,6 +17,18 @@ app.use(cors({
   credentials: true
 }));
 
+
+
+const limiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 minutes
+	limit: 5, 
+	standardHeaders: 'draft-8', 
+	legacyHeaders: false, 
+	ipv6Subnet: 56, 
+})
+
+ 
+app.use(limiter)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
